@@ -16,6 +16,9 @@ const widgetArea = document.getElementById('widget-area');
 let notes = JSON.parse(localStorage.getItem('aikon_notes')) || [];
 let activeTimers = [];
 
+// Secure API Key Handling
+let GEMINI_API_KEY = localStorage.getItem('aikon_gemini_key') || '';
+
 function addMessage(text, sender) {
     const msg = document.createElement('div');
     msg.className = `message msg-${sender}`;
@@ -29,7 +32,18 @@ function fillCommand(val) {
     inputCmd.focus();
 }
 
-// Web Audio Synth for Custom Energy Sound Effect
+// Initial Boot Logic
+function checkSystemStatus() {
+    if (!GEMINI_API_KEY) {
+        addMessage("⚙️ [SYSTEM READY] Local engines active. Gemini is offline. To link it, type: 'set key YOUR_KEY'.", 'aikon');
+    } else {
+        addMessage("📡 [SYSTEM READY] Local engines active. To prompt Gemini, start with '/ask'. To disconnect, type '/disconnect'.", 'aikon');
+    }
+}
+
+window.addEventListener('DOMContentLoaded', checkSystemStatus);
+
+// Web Audio Synth for Energy Tone
 function playEnergyTone() {
     try {
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -103,35 +117,99 @@ function safeEval(str) {
     }
 }
 
-function queryAnimeLore(query) {
-    const q = query.toLowerCase();
-    if (q.includes("goku") || q.includes("kakarot")) {
-        return "Son Goku. Earth's greatest protector. He achieved Ultra Instinct during the Tournament of Power, bypassing mental latency entirely. Current form parameters: Complete, Instinctive, Unstoppable.";
+// Call Gemini API Direct REST EndPoint
+async function queryGemini(promptText) {
+    if (!GEMINI_API_KEY) {
+        addMessage("❌ Error: Gemini is not linked. Type 'set key YOUR_KEY' to connect.", 'aikon');
+        return;
     }
-    if (q.includes("ultra instinct") || q.includes("ui")) {
-        return "Ultra Instinct (Migatte no Gokui) is an state achieved by angels and supreme gods. It shifts execution from the brain's synapses straight to the body's muscle fibers. No hesitation, no defense gaps.";
+
+    addMessage("⚡ Channelling neural link...", 'aikon');
+    
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+
+    try {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                contents: [{
+                    parts: [{
+                        text: `You are Aikon, a sleek operating system companion engineered with "Ultra Instinct" parameters. You speak with a confident, modern, and cosmic aesthetic. Keep responses relatively concise and focused on the user's prompt: ${promptText}`
+                    }]
+                }]
+            })
+        });
+
+        const data = await response.json();
+        
+        // Remove loading message
+        const messages = document.querySelectorAll('.message');
+        if (messages.length > 0) {
+            messages[messages.length - 1].remove();
+        }
+
+        if (data.candidates && data.candidates[0].content.parts[0].text) {
+            const reply = data.candidates[0].content.parts[0].text;
+            addMessage(reply, 'aikon');
+        } else {
+            addMessage("📡 [LINK FAIL] Received an empty packet response from the Gemini server.", 'aikon');
+        }
+    } catch (error) {
+        const messages = document.querySelectorAll('.message');
+        if (messages.length > 0) {
+            messages[messages.length - 1].remove();
+        }
+        addMessage("💥 [LINK CRASH] Connection to neural network failed. Check your network or API key status.", 'aikon');
+        console.error(error);
     }
-    if (q.includes("vegeta") || q.includes("ego")) {
-        return "Prince Vegeta. Sidestepped Ultra Instinct to manifest 'Ultra Ego' (Wagamama no Gokui), which gains strength directly from damage taken and pure battle drive.";
-    }
-    if (q.includes("beerus") || q.includes("destruction")) {
-        return "Lord Beerus, God of Destruction. He possesses supreme Hakai energy. Though incredibly lazy, his power remains vastly superior to almost all mortal entities.";
-    }
-    if (q.includes("anime") || q.includes("naruto") || q.includes("luffy")) {
-        return "I am connected to multi-dimensional servers containing historical data on Ninja scroll strategies, Devil Fruit locations, and spiritual soul reaper systems.";
-    }
-    return null;
 }
 
 function handleCommand(raw) {
     const text = raw.trim();
     if (!text) return;
 
+    // 1. API Key Setup Commands
+    if (text.toLowerCase().startsWith("set key ")) {
+        const inputKey = text.substring(8).trim();
+        if (inputKey) {
+            GEMINI_API_KEY = inputKey;
+            localStorage.setItem('aikon_gemini_key', inputKey);
+            addMessage("User action: Key input received.", 'user');
+            inputCmd.value = '';
+            addMessage("🔑 Success! Your secure Gemini API Key has been saved locally. Use '/ask [prompt]' to chat with Gemini.", 'aikon');
+        }
+        return;
+    }
+
+    // 2. DISCONNECT COMMANDS
+    if (text.toLowerCase() === "clear key" || text.toLowerCase() === "/disconnect" || text.toLowerCase() === "disconnect") {
+        GEMINI_API_KEY = '';
+        localStorage.removeItem('aikon_gemini_key');
+        addMessage(text, 'user');
+        inputCmd.value = '';
+        addMessage("🔒 [DISCONNECTED] Gemini neural link terminated. All API credentials purged from local memory. Core is now 100% Offline Secure.", 'aikon');
+        return;
+    }
+
     addMessage(text, 'user');
     inputCmd.value = '';
     const lower = text.toLowerCase();
 
-    // Time & Date
+    // 3. EXPLICIT GEMINI TRIGGER
+    if (lower.startsWith("/ask ") || lower.startsWith("/gemini ")) {
+        const promptText = text.substring(text.indexOf(" ") + 1).trim();
+        if (!promptText) {
+            addMessage("❌ Please provide a prompt after the command. Example: '/ask what is gravity?'", 'aikon');
+            return;
+        }
+        queryGemini(promptText);
+        return;
+    }
+
+    // 4. Clock & Date
     if (lower.includes("time") || lower.includes("what time")) {
         addMessage(`🕒 System time: ${new Date().toLocaleTimeString()}`, 'aikon');
         return;
@@ -141,7 +219,7 @@ function handleCommand(raw) {
         return;
     }
 
-    // Timer Parser
+    // 5. Local Timer Engine
     const timerMatch = lower.match(/(?:timer|remind|reminder)\s+(?:for\s+)?(\d+)\s*(second|sec|minute|min|hour)/i);
     if (timerMatch) {
         let amt = parseInt(timerMatch[1]);
@@ -184,7 +262,7 @@ function handleCommand(raw) {
         return;
     }
 
-    // Notes engine (Local Storage)
+    // 6. Local Notes Engine
     if (lower.startsWith("note:") || lower.startsWith("remember that")) {
         const noteVal = raw.replace(/(note:|remember that)/i, "").trim();
         notes.push(noteVal);
@@ -195,7 +273,7 @@ function handleCommand(raw) {
 
     if (lower === "show my notes" || lower === "show notes" || lower === "notes") {
         if (notes.length === 0) {
-            addMessage("📝 No local notes saved yet. Tell me 'Note: Remember my keys are on the table'.", 'aikon');
+            addMessage("📝 No local notes saved yet.", 'aikon');
         } else {
             addMessage("📝 Local Memories:\n" + notes.map((n, idx) => `${idx + 1}. ${n}`).join('\n'), 'aikon');
         }
@@ -221,7 +299,7 @@ function handleCommand(raw) {
         return;
     }
 
-    // Custom Math parsing
+    // 7. Local Math
     const mathMatch = text.match(/[\d+\-*/().\s]{3,}/g);
     if (mathMatch && (lower.includes("calculate") || !isNaN(safeEval(text)))) {
         const expr = text.replace(/calculate/i, "").trim();
@@ -232,14 +310,8 @@ function handleCommand(raw) {
         }
     }
 
-    // Lore database querying
-    const loreAnswer = queryAnimeLore(text);
-    if (loreAnswer) {
-        addMessage(loreAnswer, 'aikon');
-        return;
-    }
-
-    addMessage(`🌌 Database missed local matches. Try saying "Note: Train tomorrow at 5am" or "Remind me to run in 30 seconds".`, 'aikon');
+    // 8. Unrecognized Local Command
+    addMessage("🤖 Command unrecognized locally. To ask Gemini, start your prompt with '/ask'.", 'aikon');
 }
 
 btnSend.addEventListener('click', () => handleCommand(inputCmd.value));
