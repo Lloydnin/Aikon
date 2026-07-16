@@ -117,7 +117,7 @@ function safeEval(str) {
     }
 }
 
-// Call Gemini API Direct REST EndPoint
+// Call Gemini API Direct REST EndPoint with Error Debugging
 async function queryGemini(promptText) {
     if (!GEMINI_API_KEY) {
         addMessage("❌ Error: Gemini is not linked. Type 'set key YOUR_KEY' to connect.", 'aikon');
@@ -151,11 +151,18 @@ async function queryGemini(promptText) {
             messages[messages.length - 1].remove();
         }
 
-        if (data.candidates && data.candidates[0].content.parts[0].text) {
+        // Catch explicit API issues from Google's response payload
+        if (data.error) {
+            addMessage(`❌ [API ERROR] ${data.error.message} (Code: ${data.error.code})`, 'aikon');
+            return;
+        }
+
+        if (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts[0].text) {
             const reply = data.candidates[0].content.parts[0].text;
             addMessage(reply, 'aikon');
         } else {
-            addMessage("📡 [LINK FAIL] Received an empty packet response from the Gemini server.", 'aikon');
+            addMessage("📡 [LINK FAIL] Received an unrecognized format from the Gemini server.", 'aikon');
+            console.log("Unparsed Response: ", data);
         }
     } catch (error) {
         const messages = document.querySelectorAll('.message');
