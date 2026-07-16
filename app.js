@@ -126,6 +126,7 @@ async function queryGemini(promptText) {
 
     addMessage("⚡ Channelling neural link...", 'aikon');
     
+    // Updated to gemini-2.5-flash as gemini-1.5-flash is retired
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
 
     try {
