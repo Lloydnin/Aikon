@@ -229,8 +229,8 @@ function handleCommand(raw) {
         if (res !== null) {
             addMessage(`🧮 Answer: ${expr} = ${res}`, 'aikon');
             return;
-                }
-            }
+        }
+    }
 
     // Lore database querying
     const loreAnswer = queryAnimeLore(text);
